@@ -235,15 +235,13 @@ def get_combined_seekers(area, seekers={}):
         flatmates_results = json.loads(make_get_request(flatmates_url, cookies=cookies, headers=headers))
     except Exception as e:
         print('Error Getting {area}: {message} (skipping...)'.format(area=area, message=e.message))
-        return dict(), dict()   
+        return seekers
     if flatmates_results['success'] == 0 : 
         print(area, ' is not a valid search area for Room Seekers: IGNORED')
-        return dict(), dict()      
+        return seekers    
     if int(flatmates_results['count']) > 10000 : #if there are more than 10k results, there must be an error: exclude this area
         print(area, ' is not returning valid search results for Room Seekers: IGNORED')
-        return dict(), dict() 
-    if flatmates_results['count'] == 0 : 
-        return dict(), { area : int(flatmates_results['count']) }
+        return seekers
     
     pages = int(flatmates_results['pages']) if 'pages' in flatmates_results else 0
  
@@ -335,7 +333,7 @@ def get_rooms(areas):
     for area in areas: 
         rooms = {**rooms, **search_rooms_in(area)} # merge dictionaries
         #print(rooms)
-        get_combined_seekers(area, people_looking)
+        people_looking = get_combined_seekers(area, people_looking)
         '''
         temp_dict1, temp_dict2 = get_combined_seekers(area)
         people_looking['listings'] = {**temp_dict1, **people_looking['listings']}
