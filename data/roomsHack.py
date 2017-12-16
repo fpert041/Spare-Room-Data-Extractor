@@ -38,8 +38,13 @@ listing_pointer = 'flatshare/flatshare_detail.pl?flatshare_id='
 
 # Build a tree data structure by parsing the HTML.
 #rooms_soup = BeautifulSoup(rooms_req.content, 'lxml')
-
 #print(rooms_soup)
+
+# =============================================================================
+#E.g. of links that "break" into their non public API
+
+#https://iphoneapp.spareroom.co.uk/flatmates?format=json&page=1&max_per_page=100&where=se13
+#https://iphoneapp.spareroom.co.uk/flatmates?&format=json&page=1&max_per_page=100&where=se13
 
 # =============================================================================
 
@@ -47,15 +52,15 @@ listing_pointer = 'flatshare/flatshare_detail.pl?flatshare_id='
 preferences = {
         'format': 'json',
         'per': 'pcm',
-        'page': 1,
-        'max_per_page': 1, #max is 100
+        'page': 100,
+        'max_per_page': 100, #max is 100
         'where': 'london',
         }
 
 buddies_preferences = {
         'format': 'json',
-        'page': 1,
-        'max_per_page': 1, #max is 100
+        'page': 100,
+        'max_per_page': 100, #max is 100
         'where': 'london',
         }
 
@@ -99,17 +104,17 @@ def filter_room_info(room_details, room_number=0):
     #exctract relevant details from a room and put it into a dictionary
     latitude = room_details['latitude'] 
     longitude = room_details['longitude'] 
-    postcode = room_details['postcode']        
+    postcode = room_details['postcode']
     bills = True if 'bills_inc' in room_details \
         and room_details['bills_inc'] == 'Yes' else False
     rooms_no = int(room_details['rooms_in_property']) if 'rooms_in_property' \
         in room_details else 0
     images = room_details['main_image_square_url'] \
         if 'main_image_square_url' in room_details else None
-    accom_type = room_details['accom_type'] if 'accom_type' in room_details else 'Unspecified'
+    accom_type = room_details['accom_type'] if 'accom_type' in room_details else 'unspecified'
     available_timestamp = datetime.now()
     bold = True if room_details['bold_ad'] == 'Y' else False
-    property_type = room_details['property_type']
+    property_type = room_details['property_type'] if 'property_type' in room_details else 'unspecified'
     couples = True if room_details['couples'] == "Y" else False
     '''
     prices = []
@@ -123,7 +128,8 @@ def filter_room_info(room_details, room_number=0):
         prices.append(price)
     '''
     price = float(room_details['rooms'][room_number]['room_price'])
-    price = price if 'per' in room_details and room_details['per'] == 'pcm' else price * 52 / 12
+    payment_period = room_details['per'] if 'per' in room_details else 'pcm'
+    price = price if payment_period == 'pcm' else price * 52 / 12
     deposit = room_details['rooms'][room_number]['security_deposit']
     if deposit is None : deposit = 0 
     else : deposit=float(deposit)
@@ -150,7 +156,8 @@ def filter_room_info(room_details, room_number=0):
             'bold_ad':bold,
             'bills_included': bills,
             'tot_rooms': rooms_no, 
-            'couples_allowed': couples               
+            'couples_allowed': couples,
+            'rental_payments': payment_period     
             }
     return room_info
     
@@ -244,15 +251,18 @@ def get_combined_seekers(area, seekers={}):
         return seekers
     
     pages = int(flatmates_results['pages']) if 'pages' in flatmates_results else 0
- 
-    if not seekers:
-        seekers['listings'] = {}
-        seekers['areas'] = { area : int(flatmates_results['count']) }
+    count = int(flatmates_results['count']) if 'count' in flatmates_results else 0
     
-    seekers['areas'] = {**seekers['areas'], **{area:int(flatmates_results['count'])} }
+    if not seekers: # if the dictionary is empty, initialise it
+        seekers['listings'] = {}
+        seekers['areas'] = { area : count }
+    
+    seekers['areas'] = {**seekers['areas'], **{area: count } }
     
     for page in range(1, min(pages, max_pages)+1):
-        preferences['page'] = page   
+        preferences['page'] = page 
+        
+        # prepare url for page request and query the website
         params = '&'.join(['{key}={value}'.format(
             key=key, value=buddies_preferences[key]) for key in buddies_preferences])
         flatmates_url = '{location}/{endpoint}?{params}'.format(
@@ -262,8 +272,8 @@ def get_combined_seekers(area, seekers={}):
         for flatmate_data in flatmates_results['results']: #iterate through listings
             #print(room_data,'\n') # checkpoint
             seeker_id = flatmate_data['advert_id']
-            rooms_wanted = int(flatmate_data['number_of_rooms_required'])
-            combined_b = int(flatmate_data['combined_budget'])
+            rooms_wanted = int(flatmate_data['number_of_rooms_required']) if 'number_of_rooms_required' in flatmate_data else 1
+            combined_b = int(flatmate_data['combined_budget']) if 'combined_budget' in flatmate_data else 0
             couples = True if flatmate_data['couples'] == 'Y' else False
             img = flatmate_data['main_image_square_url'] if 'main_image_square_url' in flatmate_data else None
             # if the seeker is also looking in previously checked areas,
@@ -273,13 +283,15 @@ def get_combined_seekers(area, seekers={}):
             else:
                 seekers['listings'][seeker_id] = {
                                         'ad_id':seeker_id, 
-                                        'name': flatmate_data['advertiser_name'],
+                                        'name': flatmate_data['advertiser_name'] if 'advertiser_name' in flatmate_data else 'unspecified',
                                         'rooms_wanted':rooms_wanted, 
                                         'searching_in':[area],
                                         'combined_budget':combined_b,
                                         'timestamp' : datetime.now().isoformat(), #ISO 8601 format: YYYY-MM-DDTHH:MM:SS
                                         'couple': couples,
-                                        'img':img
+                                        'img':img,
+                                        'matching_search_areas' : flatmate_data['example_matching_area'].split(',') if\
+                                                    'example_matching_area' in flatmate_data else [area]
                                     }
     return seekers
     #return flatmates_results {} #commented line returns everything
@@ -347,7 +359,10 @@ def get_rooms(areas):
 str_areas = 'SE1 SE1P SE2 SE3 SE4 SE5 SE6 SE7 SE8 SE9 SE10 SE11 SE12 SE13 SE14 SE15 SE16 SE17 SE18 SE19 SE20 SE21 SE22 SE23 SE24 SE25 SE26 SE27 SE28 SE99' 
 areas = str_areas.split()
 
-    # South East London -> SE1 SE2 SE3 SE4 SE5 SE6 SE7 SE8 SE9 SE10 SE11 SE12 SE13 SE14 SE15 SE16 SE17 SE18 SE19 SE20 SE21 SE22 SE23 SE24 SE25 SE26 SE27 SE28 -> [SPARE ROOM DOES NOT INCLUDE SE99 AND SE1P] The area contains approximately 412,444 households with a population of about 988,126 (2011 census)
-    # Croydon postcodes -> CR0 CR2 CR3 CR4 CR5 CR6 CR7 CR8 CR9 [ SPARE ROOM DOES NOT HAVE CR44] CR90 -> The area contains approximately 158,695 households with a population of about 405,236 (2011 census)
+    # South East London -> SE1 SE1P SE2 SE3 SE4 SE5 SE6 SE7 SE8 SE9 SE10 SE11 SE12 SE13 SE14 SE15 SE16 SE17 SE18 SE19 SE20 SE21 SE22 SE23 SE24 SE25 SE26 SE27 SE28 SE99 - The area contains approximately 412,444 households with a population of about 988,126 (2011 census)
+    # Croydon postcodes -> CR0 CR2 CR3 CR4 CR5 CR6 CR7 CR8 CR9 [ SPARE ROOM DOES NOT HAVE CR44 CR90 - The area contains approximately 158,695 households with a population of about 405,236 (2011 census)
 
-get_rooms(areas)
+
+
+
+get_rooms(areas) # main function()
