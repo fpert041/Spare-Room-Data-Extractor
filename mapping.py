@@ -214,18 +214,31 @@ fig4.set_size_inches(14, 10)
 # Bar-chart Average Price per ensuite & furnished
 # =============================================================================
 
-ppf = rooms_df['price'].groupby(rooms_df['furnished']).mean()
-ppe = rooms_df['price'].groupby(rooms_df['ensuite']).mean()
+print()
+
+ppf = rooms_df['price'].groupby(rooms_df['furnished'])
+print(ppf.count())
+print(ppf.mean())
+print(ppf.median())
+print(ppf.apply(pd.Series.mode))
+print()
+ppe = rooms_df['price'].groupby(rooms_df['ensuite'])
+print(ppe.count())
+print(ppe.mean())
+print(ppe.median())
+print(ppe.apply(pd.Series.mode))
+
+# Median: not skewed so much by very large or small values
 
 fig5, ax5 = plt.subplots(1,2)
 
-ax5[0].bar(['Unfurnished', 'Furnished'], ppf)
+ax5[0].bar(['Unfurnished', 'Furnished'], ppf.median(), color=['darkred', 'darkblue'])
 ax5[0].set_yticks(np.arange(0, 950, 50))
 ax5[0].set_title('Room Price Furnished / Unfurnished')
-ax5[0].set_ylabel('Average Price')
+ax5[0].set_ylabel('Median Price across SE London')
 
 
-ax5[1].bar(['Without Ensuite', 'With Ensuite'], ppe)
+ax5[1].bar(['Without Ensuite', 'With Ensuite'], ppe.median(), color=['darkred', 'darkblue'])
 ax5[1].set_yticks(np.arange(0, 950, 50))
 ax5[1].set_title('Room Price with / without Ensuite')
 ax5[1].set_xlabel("")
